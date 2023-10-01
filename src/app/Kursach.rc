@@ -1,0 +1,110 @@
+#include "resource.h"
+
+#include "winres.h"
+
+LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+SETTINGS_VIEW DIALOGEX 0, 0, 389, 216
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Параметры"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+DEFPUSHBUTTON   "ОК", IDOK, 264, 194, 50, 14
+PUSHBUTTON      "Отмена", IDCANCEL, 327, 194, 50, 14
+GROUPBOX        "Цвета", IDC_STATIC, 12, 12, 132, 145
+LTEXT           "Фон графика", IDC_STATIC, 18, 25, 67, 8
+CONTROL         "", IDB_BACKGND, "Button", BS_OWNERDRAW, 92, 22, 45, 14
+LTEXT           "Фон по оси У", IDC_STATIC, 18, 44, 67, 8
+CONTROL         "", IDB_SIDE, "Button", BS_OWNERDRAW, 92, 41, 45, 14
+LTEXT           "Фон по оси Х", IDC_STATIC, 18, 63, 67, 8
+CONTROL         "", IDB_BOTTOM, "Button", BS_OWNERDRAW, 92, 60, 45, 14
+LTEXT           "Оси", IDC_STATIC, 18, 82, 67, 8
+CONTROL         "", IDB_AXIS, "Button", BS_OWNERDRAW, 92, 79, 45, 14
+LTEXT           "Сетка осн.", IDC_STATIC, 17, 101, 67, 8
+CONTROL         "", IDB_MGRID, "Button", BS_OWNERDRAW, 92, 98, 45, 14
+LTEXT           "Сетка втор.", IDC_STATIC, 17, 121, 67, 8
+CONTROL         "", IDB_SGRID, "Button", BS_OWNERDRAW, 92, 118, 45, 14
+GROUPBOX        "Толщина линий", IDC_STATIC, 12, 158, 132, 50
+EDITTEXT        IDE_GRAPHW, 89, 169, 47, 14, ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+LTEXT           "График", IDC_STATIC, 18, 171, 67, 8
+EDITTEXT        IDE_AXISW, 89, 188, 47, 14, ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+LTEXT           "Оси", IDC_STATIC, 18, 190, 67, 8
+GROUPBOX        "Внешний вид", IDC_STATIC, 6, 4, 144, 208
+GROUPBOX        "Спектроанализатор", IDC_STATIC, 155, 4, 224, 51
+COMBOBOX        IDCB_WF, 294, 16, 78, 100, CBS_DROPDOWN | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+LTEXT           "Оконная функция", IDC_STATIC, 161, 18, 67, 8
+EDITTEXT        IDE_XSPLIT, 294, 73, 78, 14, ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+LTEXT           "Макс. количество разбиений по Х", IDC_STATIC, 162, 75, 121, 8
+EDITTEXT        IDE_YSPLIT, 294, 91, 78, 14, ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+LTEXT           "Макс. количество разбиений по У", IDC_STATIC, 162, 93, 118, 8
+EDITTEXT        IDE_SAMPLE, 294, 33, 78, 14, ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+LTEXT           "Количество отсчетов в окне", IDC_STATIC, 162, 35, 119, 8
+GROUPBOX        "Сетка", IDC_STATIC, 155, 57, 224, 55
+LTEXT           "Цвет графика", IDC_STATIC, 17, 141, 67, 8
+CONTROL         "", IDB_GRAPH, "Button", BS_OWNERDRAW, 92, 138, 45, 14
+END
+
+ABOUT DIALOGEX 0, 0, 309, 176
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "О программе"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+DEFPUSHBUTTON   "ОК", IDOK, 198, 155, 50, 14
+PUSHBUTTON      "Отмена", IDCANCEL, 252, 155, 50, 14
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+"SETTINGS_VIEW", DIALOG
+BEGIN
+RIGHTMARGIN, 388
+BOTTOMMARGIN, 208
+END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+MAINMENU MENU
+BEGIN
+POPUP "&Файл"
+BEGIN
+MENUITEM "В&ыход", IDM_EXIT
+END
+POPUP "&Инструменты"
+BEGIN
+MENUITEM "&Параметры...", IDM_SETTINGS
+END
+MENUITEM "&О программе", IDM_ABOUT
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+SETTINGS AFX_DIALOG_LAYOUT
+BEGIN
+0
+END
+
+SETTINGS_VIEW AFX_DIALOG_LAYOUT
+BEGIN
+0
+END

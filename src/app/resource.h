@@ -1,0 +1,30 @@
+﻿#define IDD_SETTDIALOG 101
+#define IDD_ABUOTDIALOG 103
+#define IDR_MENU1 105
+#define IDB_BACKGND 1004
+#define IDB_SIDE 1005
+#define IDB_BOTTOM 1006
+#define IDB_AXIS 1007
+#define IDB_MGRID 1008
+#define IDB_SGRID 1009
+#define IDE_GRAPHW 1010
+#define IDE_AXISW 1011
+#define IDCB_WF 1012
+#define IDE_XSPLIT 1013
+#define IDE_YSPLIT 1014
+#define IDE_SAMPLE 1015
+#define IDB_GRAPH 1016
+#define IDM_EXIT 2001
+#define IDM_SETTINGS 2021
+#define IDM_ABOUT 3001
+
+// Next default values for new objects
+//
+#ifdef APSTUDIO_INVOKED
+	#ifndef APSTUDIO_READONLY_SYMBOLS
+		#define _APS_NEXT_RESOURCE_VALUE 109
+		#define _APS_NEXT_COMMAND_VALUE 40005
+		#define _APS_NEXT_CONTROL_VALUE 1013
+		#define _APS_NEXT_SYMED_VALUE 101
+	#endif
+#endif
