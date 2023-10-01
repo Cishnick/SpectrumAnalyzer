@@ -13,6 +13,7 @@ class AudioDataCapturer : public IAudioDataCapturer
 {
 public:
 	AudioDataCapturer();
+	virtual ~AudioDataCapturer();
 
 	VectorOfString GetDeviceList() override;
 
@@ -43,16 +44,9 @@ public:
 	void Handle(Reals const &r_chan, Reals const &l_chan, unsigned sample_frenq);
 
 private:
-	// Возвращает имя устройства с индексом DeviceIndex из DevieCollection
-	string GetDeviceName(IMMDeviceCollection *DeviceCollection, UINT DeviceIndex);
-
-	// Обновляет коллекцию устройств
-	void UpdateDeviceCollection();
-
 	// Основная рабочая функция, которая выполняется в отдельном потоке
 	void run();
 
-	IMMDeviceCollection *_deviceCollection;
 	list<IObserverAudio *> _observers;
 	IMMDevice *_device;
 	IAudioClient *_AudioClient;
@@ -64,6 +58,8 @@ private:
 	bool _isWorked;
 	RingBuffer<double> _buffer_r;
 	RingBuffer<double> _buffer_l;
-	size_t _NofDev;
 	int _ind;
+
+private:
+	std::unique_ptr<class AudioDevicesGetter> audioDevicesGetter_;
 };

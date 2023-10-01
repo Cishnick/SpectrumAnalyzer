@@ -2,6 +2,8 @@
 
 #include "AudioDataCapturer.h"
 
+#include "AudioDevicesGetter/audio_devices_getter.h"
+
 IAudioDataCapturer *FactoryCapturer::make()
 {
 	return new AudioDataCapturer();
@@ -9,8 +11,7 @@ IAudioDataCapturer *FactoryCapturer::make()
 
 // -------------------------------------------Конструктор------------------------------------
 AudioDataCapturer::AudioDataCapturer()
-	: _deviceCollection(nullptr)
-	, _device(nullptr)
+	: _device(nullptr)
 	, _role(ERole::eMultimedia)
 	, _buffer_r(0)
 	, _buffer_l(0)
@@ -20,7 +21,7 @@ AudioDataCapturer::AudioDataCapturer()
 	, _BufferSize(0)
 	, _thread()
 	, _isWorked(false)
-	, _NofDev(0)
+	, audioDevicesGetter_(std::make_unique<AudioDevicesGetter>())
 {
 }
 
@@ -28,12 +29,7 @@ AudioDataCapturer::AudioDataCapturer()
 
 VectorOfString AudioDataCapturer::GetDeviceList()
 {
-	VectorOfString res;
-	UpdateDeviceCollection();
-	for (UINT i = 0; i < _NofDev; i += 1)
-		res.push_back(GetDeviceName(_deviceCollection, i));
-
-	return res;
+	return audioDevicesGetter_->getDevicesList();
 }
 
 // ------------------------------------------------PickDevice--------------------------------
@@ -41,12 +37,12 @@ VectorOfString AudioDataCapturer::GetDeviceList()
 void AudioDataCapturer::PickDevice(unsigned index)
 {
 	HRESULT hr;
-	if (index >= _NofDev)
+	if (index >= audioDevicesGetter_->getDevicesNumber())
 	{
 		ErrorMessage("Wrong device index", index);
 		return;
 	}
-	hr = _deviceCollection->Item(index, &_device);
+	hr = audioDevicesGetter_->getDeviceCollection().Item(index, &_device);
 	if (FAILED(hr))
 	{
 		ErrorMessage("Unable to retrieve device", hr);
@@ -145,7 +141,6 @@ void AudioDataCapturer::Stop()
 
 void AudioDataCapturer::Release()
 {
-	SafeRelease(&_deviceCollection);
 	SafeRelease(&_device);
 	SafeRelease(&_AudioClient);
 	SafeRelease(&_CaptureClient);
@@ -167,7 +162,7 @@ void AudioDataCapturer::SetNSamples(int n)
 		Stop();
 	Release();
 
-	UpdateDeviceCollection();
+	audioDevicesGetter_->update();
 	PickDevice(_ind);
 	Initialize(n);
 	if (temp)
@@ -185,7 +180,7 @@ void AudioDataCapturer::ChangeDevice(unsigned index)
 	_buffer_r.Reset();
 	_buffer_l.Reset();
 
-	UpdateDeviceCollection();
+	audioDevicesGetter_->update();
 	PickDevice(index);
 	Initialize(_buffer_r.getSize());
 	if (temp)
@@ -198,84 +193,6 @@ UINT32 AudioDataCapturer::GetSampleFrenq()
 {
 	return _MixFormat->nSamplesPerSec;
 }
-
-// -----------------------------------------------GetDevice----------------------------------
-
-string AudioDataCapturer::GetDeviceName(IMMDeviceCollection *DeviceCollection, UINT DeviceIndex)
-{
-	IMMDevice *device;
-	HRESULT hr;
-	string res(128, ' ');
-	IPropertyStore *propertyStore;
-	PROPVARIANT friendlyName;
-	wchar_t deviceName[128];
-	wchar_t *returnValue;
-
-	hr = DeviceCollection->Item(DeviceIndex, &device);
-	if (FAILED(hr))
-		ErrorMessage("Unable to get device", hr);
-
-	hr = device->OpenPropertyStore(STGM_READ, &propertyStore);
-	SafeRelease(&device);
-	if (FAILED(hr))
-		ErrorMessage("Unable to open device property store", hr);
-
-	PropVariantInit(&friendlyName);
-	hr = propertyStore->GetValue(PKEY_Device_FriendlyName, &friendlyName);
-	SafeRelease(&propertyStore);
-
-	if (FAILED(hr))
-	{
-		ErrorMessage("Unable to retrieve friendly name for device", hr);
-	}
-
-	hr = StringCbPrintfW(deviceName,
-	                     sizeof(deviceName),
-	                     L"%s",
-	                     friendlyName.vt != VT_LPWSTR ? L"Unknown" : friendlyName.pwszVal);
-	if (FAILED(hr))
-	{
-		ErrorMessage("Unable to format friendly name for device", hr);
-	}
-
-	PropVariantClear(&friendlyName);
-
-	returnValue = _wcsdup(deviceName);
-	if (returnValue == NULL)
-	{
-		ErrorMessage("Unable to allocate buffer for return", 0);
-	}
-	else
-	{
-		WideCharToMultiByte(CP_ACP, 0, returnValue, -1, const_cast<char *>(res.c_str()), 128, 0, 0);
-	}
-
-	return res;
-}
-
-// ------------------------------------------------------UpdateDeviceCollection---------------
-
-void AudioDataCapturer::UpdateDeviceCollection()
-{
-	HRESULT hr;
-	IMMDeviceEnumerator *deviceEnumerator = nullptr;
-
-	hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&deviceEnumerator));
-	if (FAILED(hr))
-		ErrorMessage("Unable to instantiate device enumerator", hr);
-
-	hr = deviceEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &_deviceCollection);
-	if (FAILED(hr))
-		ErrorMessage("Unable to retrieve device collection", hr);
-
-	SafeRelease(&deviceEnumerator);
-
-	hr = _deviceCollection->GetCount(reinterpret_cast<UINT *>(&_NofDev));
-	if (FAILED(hr))
-		ErrorMessage("Unable to get device collection length", hr);
-}
-
-// ---------------------------------------------------run------------------------------------
 
 void AudioDataCapturer::run()
 {
@@ -339,3 +256,5 @@ void AudioDataCapturer::run()
 		}
 	}
 }
+
+AudioDataCapturer::~AudioDataCapturer() = default;
