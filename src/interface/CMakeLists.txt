@@ -1,10 +1,10 @@
-set(PROJECT capturer)
+set(TARGET interface)
 
 file(GLOB_RECURSE SOURCES
         "*.h"
-        "*.cpp"
+//        "*.cpp"
         )
 
-add_library(${PROJECT} ${SOURCES})
+add_library(${TARGET} INTERFACE ${SOURCES})
 
 include_directories(${CMAKE_SOURCE_DIR})

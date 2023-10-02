@@ -1,5 +1,3 @@
-cmake_minimum_required(VERSION 3.8)
-
 set(PROJECT ${PROJECT_NAME})
 
 file(GLOB_RECURSE SOURCES

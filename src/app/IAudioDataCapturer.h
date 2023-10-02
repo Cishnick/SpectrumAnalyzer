@@ -24,34 +24,25 @@ public:
 	virtual void remove(IObserverAudio *obs) = 0;
 
 	// Возвращает набор строк с именами устройств захвата
-	virtual std::vector<std::string> GetDeviceList() = 0;
-
-	// Выбирает устройство по индексу вектора из функции GetDeviceList
-	virtual void PickDevice(unsigned index) = 0;
+	virtual std::vector<std::string> getDeviceList() = 0;
 
 	// Изменяет выбранное устройство захвата
-	virtual void ChangeDevice(unsigned index) = 0;
-
-	// Инициализирует модуль
-	virtual void Initialize(size_t buffer_size) = 0;
+	virtual void changeDevice(unsigned index) = 0;
 
 	// Начинает захват данных
-	virtual void Start() = 0;
+	virtual void start() = 0;
 
 	// Останавливает захват данных
-	virtual void Stop() = 0;
-
-	// Освобождает все ресурсы
-	virtual void Release() = 0;
+	virtual void stop() = 0;
 
 	// Возвращает частоту дискретизации
 	virtual UINT32 GetSampleFrenq() = 0;
 
 	// Возвращает true, если захват идет
-	virtual bool isRun() = 0;
+	virtual bool isRunning() = 0;
 
 	// Изменяет размер буфера
-	virtual void SetNSamples(int n) = 0;
+	virtual void setFifoSize(int n) = 0;
 };
 
 // Фабрика, для создания экземпляра интерфейса

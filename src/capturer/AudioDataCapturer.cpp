@@ -2,68 +2,48 @@
 
 #include "AudioDataCapturer.h"
 
+#include <cassert>
+
 #include "AudioDevicesGetter/audio_devices_getter.h"
+
+constexpr auto kReftimesPerSec = 10000000;
 
 IAudioDataCapturer *FactoryCapturer::make()
 {
 	return new AudioDataCapturer();
 }
 
-// -------------------------------------------Конструктор------------------------------------
+namespace
+{
+constexpr auto kDefaultBufferSize = 4800;
+}
+
 AudioDataCapturer::AudioDataCapturer()
-	: _device(nullptr)
-	, _role(ERole::eMultimedia)
-	, _buffer_r(0)
+	: _buffer_r(0)
 	, _buffer_l(0)
-	, _AudioClient(NULL)
-	, _CaptureClient(NULL)
-	, _MixFormat(NULL)
-	, _BufferSize(0)
-	, _thread()
-	, _isWorked(false)
-	, audioDevicesGetter_(std::make_unique<AudioDevicesGetter>())
+	, bufferSize(0)
+	, thread()
+	, running(false)
+	, currentDeviceIndex(0)
+	, audioDevicesGetter(std::make_unique<AudioDevicesGetter>())
 {
+	initialize(kDefaultBufferSize);
 }
 
-// -------------------------------------------------GetDeviceList----------------------------
-
-VectorOfString AudioDataCapturer::GetDeviceList()
+std::vector<std::string> AudioDataCapturer::getDeviceList()
 {
-	return audioDevicesGetter_->getDevicesList();
+	return audioDevicesGetter->getDevicesList();
 }
-
-// ------------------------------------------------PickDevice--------------------------------
-
-void AudioDataCapturer::PickDevice(unsigned index)
-{
-	HRESULT hr;
-	if (index >= audioDevicesGetter_->getDevicesNumber())
-	{
-		ErrorMessage("Wrong device index", index);
-		return;
-	}
-	hr = audioDevicesGetter_->getDeviceCollection().Item(index, &_device);
-	if (FAILED(hr))
-	{
-		ErrorMessage("Unable to retrieve device", hr);
-	}
-}
-
-// ----------------------------------------------------------add-----------------------------
 
 void AudioDataCapturer::add(IObserverAudio *obs)
 {
 	_observers.push_back(obs);
 }
 
-// ----------------------------------------------------remove--------------------------------
-
 void AudioDataCapturer::remove(IObserverAudio *obs)
 {
 	_observers.remove(obs);
 }
-
-// ------------------------------------------------------Handle------------------------------
 
 void AudioDataCapturer::Handle(Reals const &r_chan, Reals const &l_chan, unsigned sample_frenq)
 {
@@ -73,125 +53,72 @@ void AudioDataCapturer::Handle(Reals const &r_chan, Reals const &l_chan, unsigne
 	}
 }
 
-// -------------------------------------------initialize-------------------------------------
-
-void AudioDataCapturer::Initialize(size_t buffer_size)
+void AudioDataCapturer::initialize(size_t fifo_size)
 {
-	HRESULT hr;
-	hr = _device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, reinterpret_cast<void **>(&_AudioClient));
-	if (FAILED(hr))
-	{
-		ErrorMessage("Unable device activation", hr);
-	}
+	audioClient.reset(IAudioClientPtr(IMMDevicePtr(audioDevicesGetter->getDeviceCollection(), currentDeviceIndex), CLSCTX_ALL));
+	mixFormat.reset(WaveFormatExPtr(audioClient));
 
-	hr = _AudioClient->GetMixFormat(&_MixFormat);
-	if (FAILED(hr))
-	{
-		ErrorMessage("Unable get mix format", hr);
-	}
+	if (auto hr =
+	        audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 20 * static_cast<UINT64>(10000), 0, mixFormat.get(), nullptr);
+	    FAILED(hr))
+		throw std::exception("Unable initialize audio client", hr);
 
-	hr = _AudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 20 * static_cast<UINT64>(10000), 0, _MixFormat, NULL);
-	if (FAILED(hr))
-	{
-		ErrorMessage("Unable initialize audio client", hr);
-	}
+	if (auto hr = audioClient->GetBufferSize(&bufferSize); FAILED(hr))
+		throw std::exception("Unable to get buffer size");
 
-	hr = _AudioClient->GetBufferSize(&_BufferSize);
-	if (FAILED(hr))
-	{
-		ErrorMessage("Unable to get buffer size", hr);
-	}
+	captureClient = IAudioCaptureClientPtr(audioClient);
 
-	hr = _AudioClient->GetService(__uuidof(IAudioCaptureClient), reinterpret_cast<void **>(&_CaptureClient));
-	if (FAILED(hr))
-	{
-		ErrorMessage("Unable to get capture client", hr);
-	}
-
-	_buffer_r = RingBuffer<double>(buffer_size);
-	_buffer_l = RingBuffer<double>(buffer_size);
+	_buffer_r = RingBuffer<double>(fifo_size);
+	_buffer_l = RingBuffer<double>(fifo_size);
 }
 
-// ------------------------------------------------------Start-------------------------------
-
-void AudioDataCapturer::Start()
+void AudioDataCapturer::start()
 {
-	HRESULT hr;
+	if (running)
+		return;
 
-	_isWorked = true;
-	_thread = std::thread([this]() { this->run(); });
+	running = true;
+	thread = std::thread(&AudioDataCapturer::run, this);
 
-	hr = _AudioClient->Start();
-	if (FAILED(hr))
-	{
-		ErrorMessage("Unable to start audio client", hr);
-	}
+	if (auto hr = audioClient->Start(); FAILED(hr))
+		throw std::exception("Unable to start audio client", hr);
 }
 
-// --------------------------------------------Stop------------------------------------------
-
-void AudioDataCapturer::Stop()
+void AudioDataCapturer::stop()
 {
-	_isWorked = false;
-	_thread.join();
-	_AudioClient->Stop();
+	stop_impl();
 }
 
-// -------------------------------------------------Release----------------------------------
-
-void AudioDataCapturer::Release()
+bool AudioDataCapturer::isRunning()
 {
-	SafeRelease(&_device);
-	SafeRelease(&_AudioClient);
-	SafeRelease(&_CaptureClient);
+	return running;
 }
 
-// -------------------------------------------------isRun-----------------------------------
-
-bool AudioDataCapturer::isRun()
+void AudioDataCapturer::setFifoSize(int n)
 {
-	return _isWorked;
+	stop();
+	audioDevicesGetter->update();
+	initialize(n);
+	start();
 }
 
-// ------------------------------------------SetNSamples------------------------------------
-
-void AudioDataCapturer::SetNSamples(int n)
+void AudioDataCapturer::changeDevice(unsigned index)
 {
-	bool temp = _isWorked;
-	if (temp)
-		Stop();
-	Release();
+	currentDeviceIndex = index;
 
-	audioDevicesGetter_->update();
-	PickDevice(_ind);
-	Initialize(n);
-	if (temp)
-		Start();
-}
-
-// --------------------------------------------changeDevice----------------------------------
-
-void AudioDataCapturer::ChangeDevice(unsigned index)
-{
-	bool temp = _isWorked;
-	if (temp)
-		Stop();
-	Release();
+	stop();
 	_buffer_r.Reset();
 	_buffer_l.Reset();
 
-	audioDevicesGetter_->update();
-	PickDevice(index);
-	Initialize(_buffer_r.getSize());
-	if (temp)
-		Start();
+	audioDevicesGetter->update();
+	initialize(_buffer_r.getSize());
 
-	_ind = index;
+	start();
 }
 
 UINT32 AudioDataCapturer::GetSampleFrenq()
 {
-	return _MixFormat->nSamplesPerSec;
+	return mixFormat->nSamplesPerSec;
 }
 
 void AudioDataCapturer::run()
@@ -202,59 +129,58 @@ void AudioDataCapturer::run()
 	DWORD flags;
 	float f[2];
 
-	Sleep(2);
+	const auto actualPacketDuration = static_cast<double>(bufferSize) / mixFormat->nSamplesPerSec;
 
-	while (_isWorked)
+	while (running)
 	{
-		do
+		while (packetSize == 0)
 		{
-			hr = _CaptureClient->GetNextPacketSize(&packetSize);
-			if (FAILED(hr))
-			{
-				ErrorMessage("Unable to get next packet size", hr);
-			}
-		} while (packetSize == 0);
-
-		hr = _CaptureClient->GetBuffer(&pData, &_BufferSize, &flags, NULL, NULL);
-		if (FAILED(hr))
-		{
-			ErrorMessage("Unable to get buffer", hr);
+			if (auto hr = captureClient->GetNextPacketSize(&packetSize); FAILED(hr))
+				throw std::exception("Unable to get next packet size", hr);
+			Sleep(static_cast<unsigned>(actualPacketDuration) / 2);
 		}
 
+		hr = captureClient->GetBuffer(&pData, &bufferSize, &flags, NULL, NULL);
+		if (FAILED(hr))
+			throw std::exception("Unable to get buffer", hr);
+
 		if (flags & AUDCLNT_BUFFERFLAGS_SILENT)
-		{
-			for (size_t i = 0; i < _BufferSize; i++)
+			for (size_t i = 0; i < bufferSize; i++)
 			{
 				auto pr = _buffer_r.push_back(0.);
 				auto pl = _buffer_l.push_back(0.);
 
-				if (pr && pl)
-				{
-					Handle(*pr, *pl, _MixFormat->nSamplesPerSec);
-				}
+				if (pr)
+					Handle(*pr, *pl, mixFormat->nSamplesPerSec);
 			}
-		}
 		else
-		{
-			for (size_t i = 0; i < _BufferSize * 2; i += 2)
+			for (size_t i = 0; i < bufferSize * 2; i += 2)
 			{
 				CopyMemory(f + 0, reinterpret_cast<float *>(pData) + i, sizeof(float));
 				CopyMemory(f + 1, reinterpret_cast<float *>(pData) + i, sizeof(float));
 				auto pr = _buffer_r.push_back(static_cast<double>(f[0]));
 				auto pl = _buffer_l.push_back(static_cast<double>(f[1]));
 
-				if (pr && pl)
-				{
-					Handle(*pr, *pl, _MixFormat->nSamplesPerSec);
-				}
+				if (pr)
+					Handle(*pr, *pl, mixFormat->nSamplesPerSec);
 			}
-		}
-		hr = _CaptureClient->ReleaseBuffer(_BufferSize);
+		hr = captureClient->ReleaseBuffer(bufferSize);
 		if (FAILED(hr))
-		{
-			ErrorMessage("Unable to release buffer of capture client", hr);
-		}
+			throw std::exception("Unable to release buffer of capture client", hr);
 	}
 }
 
-AudioDataCapturer::~AudioDataCapturer() = default;
+AudioDataCapturer::~AudioDataCapturer()
+{
+	stop_impl();
+}
+
+void AudioDataCapturer::stop_impl()
+{
+	if (!running)
+		return;
+
+	running = false;
+	thread.join();
+	audioClient->Stop();
+}

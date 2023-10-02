@@ -1,11 +1,12 @@
 ﻿#include "src/app/stdafx.h"
 
 #include <thread>
+#include <atomic>
 
+#include "raii/api_wrappers.h"
 #include "src/app/IAudioDataCapturer.h"
 #include "src/app/RingBuffer.h"
 
-// Объявление синонимов типов
 using namespace std;
 
 // Основной класс, реализующий интерфейс
@@ -15,51 +16,50 @@ public:
 	AudioDataCapturer();
 	virtual ~AudioDataCapturer();
 
-	VectorOfString GetDeviceList() override;
-
-	void PickDevice(unsigned index) override;
+	std::vector<std::string> getDeviceList() override;
 
 	void add(IObserverAudio *obs) override;
 
 	void remove(IObserverAudio *obs) override;
 
-	void ChangeDevice(unsigned index) override;
+	void changeDevice(unsigned index) override;
 
 	UINT32 GetSampleFrenq() override;
 
-	void Initialize(size_t buffer_size) override;
 
-	void Start() override;
+	void start() override;
 
-	void Stop() override;
+	void stop() override;
 
-	void Release() override;
+	bool isRunning() override;
 
-	bool isRun() override;
-
-	void SetNSamples(int n) override;
+	void setFifoSize(int n) override;
 
 	// Сообщает всем наблюдателям о наполнении буфера. Передает данные для обоих каналов
 	// и частоту дискретизации
 	void Handle(Reals const &r_chan, Reals const &l_chan, unsigned sample_frenq);
 
 private:
+	void initialize(size_t fifo_size);
+
+	// For call from destructor instead virtual function 'stop'
+	void stop_impl();
+
 	// Основная рабочая функция, которая выполняется в отдельном потоке
 	void run();
 
-	list<IObserverAudio *> _observers;
-	IMMDevice *_device;
-	IAudioClient *_AudioClient;
-	IAudioCaptureClient *_CaptureClient;
-	ERole _role;
-	WAVEFORMATEX *_MixFormat;
-	UINT32 _BufferSize;
-	std::thread _thread;
-	bool _isWorked;
+private:
+	std::list<IObserverAudio *> _observers;
+	IAudioClientPtr audioClient;
+	IAudioCaptureClientPtr captureClient;
+	WaveFormatExPtr mixFormat;
+	UINT32 bufferSize;
+	std::thread thread;
+	std::atomic_bool running;
 	RingBuffer<double> _buffer_r;
 	RingBuffer<double> _buffer_l;
-	int _ind;
+	unsigned currentDeviceIndex;
 
 private:
-	std::unique_ptr<class AudioDevicesGetter> audioDevicesGetter_;
+	std::unique_ptr<class AudioDevicesGetter> audioDevicesGetter;
 };
