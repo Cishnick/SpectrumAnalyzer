@@ -17,12 +17,6 @@ struct PropagateConstPtrCreator<std::shared_ptr<T>>
 	{
 		return std::make_shared<T>(std::forward<ARGS>(args)...);
 	}
-
-	template <class... ARGS>
-	std::shared_ptr<T> operator()(ARGS &&...args)
-	{
-		return std::make_shared<T>(std::forward<ARGS>(args)...);
-	}
 };
 
 template <class T>

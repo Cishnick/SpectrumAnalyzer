@@ -2,15 +2,11 @@
 
 #include "AudioDataCapturer.h"
 
-#include <cassert>
-
 #include "AudioDevicesGetter/audio_devices_getter.h"
 
-constexpr auto kReftimesPerSec = 10000000;
-
-IAudioDataCapturer *FactoryCapturer::make()
+std::unique_ptr<IAudioDataCapturer> FactoryCapturer::make()
 {
-	return new AudioDataCapturer();
+	return std::make_unique<AudioDataCapturer>();
 }
 
 namespace
@@ -19,10 +15,7 @@ constexpr auto kDefaultBufferSize = 4800;
 }
 
 AudioDataCapturer::AudioDataCapturer()
-	: _buffer_r(0)
-	, _buffer_l(0)
-	, bufferSize(0)
-	, thread()
+	: bufferSize(0)
 	, running(false)
 	, currentDeviceIndex(0)
 	, audioDevicesGetter(std::make_unique<AudioDevicesGetter>())
@@ -33,24 +26,6 @@ AudioDataCapturer::AudioDataCapturer()
 std::vector<std::string> AudioDataCapturer::getDeviceList()
 {
 	return audioDevicesGetter->getDevicesList();
-}
-
-void AudioDataCapturer::add(IObserverAudio *obs)
-{
-	_observers.push_back(obs);
-}
-
-void AudioDataCapturer::remove(IObserverAudio *obs)
-{
-	_observers.remove(obs);
-}
-
-void AudioDataCapturer::Handle(Reals const &r_chan, Reals const &l_chan, unsigned sample_frenq)
-{
-	for (auto i : _observers)
-	{
-		i->Buffer_OVF(r_chan, l_chan);
-	}
 }
 
 void AudioDataCapturer::initialize(size_t fifo_size)
@@ -68,8 +43,8 @@ void AudioDataCapturer::initialize(size_t fifo_size)
 
 	captureClient = IAudioCaptureClientPtr(audioClient);
 
-	_buffer_r = RingBuffer<double>(fifo_size);
-	_buffer_l = RingBuffer<double>(fifo_size);
+	bufferRightChannel = RingBuffer<double>(fifo_size);
+	bufferLeftChannel = RingBuffer<double>(fifo_size);
 }
 
 void AudioDataCapturer::start()
@@ -104,19 +79,21 @@ void AudioDataCapturer::setFifoSize(int n)
 
 void AudioDataCapturer::changeDevice(unsigned index)
 {
-	currentDeviceIndex = index;
-
+	bool wasRunning = running;
 	stop();
-	_buffer_r.Reset();
-	_buffer_l.Reset();
+
+	currentDeviceIndex = index;
+	bufferRightChannel.reset();
+	bufferLeftChannel.reset();
 
 	audioDevicesGetter->update();
-	initialize(_buffer_r.getSize());
+	initialize(bufferRightChannel.getSize());
 
-	start();
+	if (wasRunning)
+		start();
 }
 
-UINT32 AudioDataCapturer::GetSampleFrenq()
+UINT32 AudioDataCapturer::getSampleFrenq()
 {
 	return mixFormat->nSamplesPerSec;
 }
@@ -124,10 +101,9 @@ UINT32 AudioDataCapturer::GetSampleFrenq()
 void AudioDataCapturer::run()
 {
 	UINT32 packetSize = 0;
-	HRESULT hr;
 	BYTE *pData;
 	DWORD flags;
-	float f[2];
+	std::pair<float, float> rawData;
 
 	const auto actualPacketDuration = static_cast<double>(bufferSize) / mixFormat->nSamplesPerSec;
 
@@ -140,32 +116,31 @@ void AudioDataCapturer::run()
 			Sleep(static_cast<unsigned>(actualPacketDuration) / 2);
 		}
 
-		hr = captureClient->GetBuffer(&pData, &bufferSize, &flags, NULL, NULL);
-		if (FAILED(hr))
+		if (auto hr = captureClient->GetBuffer(&pData, &bufferSize, &flags, nullptr, nullptr); FAILED(hr))
 			throw std::exception("Unable to get buffer", hr);
 
 		if (flags & AUDCLNT_BUFFERFLAGS_SILENT)
 			for (size_t i = 0; i < bufferSize; i++)
 			{
-				auto pr = _buffer_r.push_back(0.);
-				auto pl = _buffer_l.push_back(0.);
+				auto rightChannel = bufferRightChannel.pushBack(0.);
+				auto leftChannel = bufferLeftChannel.pushBack(0.);
 
-				if (pr)
-					Handle(*pr, *pl, mixFormat->nSamplesPerSec);
+				if (rightChannel)
+					updateData(*rightChannel, *leftChannel);
 			}
 		else
-			for (size_t i = 0; i < bufferSize * 2; i += 2)
+			for (size_t i = 0; i < bufferSize * 2; i++)
 			{
-				CopyMemory(f + 0, reinterpret_cast<float *>(pData) + i, sizeof(float));
-				CopyMemory(f + 1, reinterpret_cast<float *>(pData) + i, sizeof(float));
-				auto pr = _buffer_r.push_back(static_cast<double>(f[0]));
-				auto pl = _buffer_l.push_back(static_cast<double>(f[1]));
+				CopyMemory(&rawData.first, reinterpret_cast<float *>(pData) + i++, sizeof(float));
+				CopyMemory(&rawData.second, reinterpret_cast<float *>(pData) + i, sizeof(float));
+				auto rightChannel = bufferRightChannel.pushBack(static_cast<double>(rawData.first));
+				auto leftChannel = bufferLeftChannel.pushBack(static_cast<double>(rawData.second));
 
-				if (pr)
-					Handle(*pr, *pl, mixFormat->nSamplesPerSec);
+				if (rightChannel)
+					updateData(*rightChannel, *leftChannel);
 			}
-		hr = captureClient->ReleaseBuffer(bufferSize);
-		if (FAILED(hr))
+
+		if (auto hr = captureClient->ReleaseBuffer(bufferSize); FAILED(hr))
 			throw std::exception("Unable to release buffer of capture client", hr);
 	}
 }
@@ -183,4 +158,17 @@ void AudioDataCapturer::stop_impl()
 	running = false;
 	thread.join();
 	audioClient->Stop();
+}
+
+AudioDataCapturerObservable &AudioDataCapturer::observable()
+{
+	return observable_;
+}
+
+void AudioDataCapturer::updateData(std::span<double> rightChannel, std::span<double> leftChannel)
+{
+	auto update = observable_.update();
+	update->leftChannel = leftChannel;
+	update->rightChannel = rightChannel;
+	update->sampleFrequency = mixFormat->nSamplesPerSec;
 }

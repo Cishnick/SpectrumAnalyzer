@@ -16,4 +16,5 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 add_subdirectory("src/capturer")
 add_subdirectory("src/app")
+add_subdirectory("src/gui")
 add_subdirectory("src/interface")

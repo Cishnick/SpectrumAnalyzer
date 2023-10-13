@@ -5,8 +5,8 @@ file(GLOB_RECURSE SOURCES
         "*.cpp"
         )
 
-add_executable(${PROJECT} WIN32 ${SOURCES} "Kursach.rc")
+add_executable(${PROJECT} WIN32 ${SOURCES} "../../resources/Kursach.rc")
 
 include_directories(${CMAKE_SOURCE_DIR})
 
-target_link_libraries(${PROJECT} capturer)
+target_link_libraries(${PROJECT} gui)
